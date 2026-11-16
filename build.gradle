@@ -61,6 +61,8 @@ neoForge {
 
 configurations {
     runtimeClasspath.extendsFrom localRuntime
+    // The unit-test runner boots the mod, so CC: Tweaked must be present there too.
+    testRuntimeClasspath.extendsFrom localRuntime
 }
 
 dependencies {
