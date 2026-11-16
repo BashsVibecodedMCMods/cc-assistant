@@ -1,0 +1,20 @@
+ai lets this computer talk to an AI model that can use tools on this computer: read and edit files, run Lua and run shell commands. Tools that change things ask you first.
+
+First, link the computer to yourself:
+ai link            (then type the code in chat)
+
+Then:
+ai                 chat
+ai <question>      ask once and exit
+ai --no-tools      chat without tools
+ai --profile name  use one of your provider profiles
+ai --resume        continue the last saved chat
+ai status          show the link, backend and limits
+
+Where the model comes from depends on the server: your own provider profiles (set up in Mods > CC: Terminal Assistant > Config), or the server's. If your computer's owner is offline, ai tells you and can wait for them.
+
+Settings:
+set ai.auto_approve true      run changes without asking
+set ai.disabled_tools a,b     hide tools from the AI
+
+Programs can use the ai API and the cc.ai module. See "help ai_tools" for writing your own tools.

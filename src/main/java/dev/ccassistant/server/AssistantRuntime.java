@@ -147,6 +147,11 @@ public final class AssistantRuntime {
         providers = ServerProviders.load(server);
     }
 
+    /** Replaces the server providers without reading the file (game tests). */
+    public void useProviders(ServerProviders p) {
+        providers = p;
+    }
+
     private PlayerTransport transport() {
         var t = transportOverride;
         return t != null ? t : netTransport;

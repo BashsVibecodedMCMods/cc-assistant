@@ -1,0 +1,26 @@
+Tools are Lua files the AI can call. Built-in tools live in /rom/tools. Add your own in /tools on this computer; the AI sees them as user_<name>.
+
+A tool file returns a table:
+
+-- /tools/chest_count.lua
+return {
+  description = "Count items in the chest on top.",
+  input_schema = {
+    type = "object",
+    properties = { item = { type = "string" } },
+    required = { "item" },
+  },
+  destructive = false,  -- true = ask first
+  timeout = 5,          -- seconds
+  run = function(input, ctx)
+    local chest = peripheral.wrap("top")
+    if not chest then return nil, "no chest" end
+    local n = 0
+    for _, s in pairs(chest.list()) do
+      if s.name == input.item then n = n + s.count end
+    end
+    return { count = n }
+  end,
+}
+
+File names: lowercase letters, digits and _, starting with a letter. Return text or a table; return nil, "message" on failure. ctx.resolve(path) checks paths. Run "ai" to see load errors.
