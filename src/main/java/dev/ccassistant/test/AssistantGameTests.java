@@ -61,6 +61,7 @@ public final class AssistantGameTests {
         Config.REQUESTS_PER_MINUTE_PER_PLAYER.set(10);
         AssistantRuntime.serverChatOverride = null;
         AssistantRuntime.transportOverride = null;
+        AssistantRuntime.timeoutOverride = null;
         rt().useProviders(dev.ccassistant.server.ServerProviders.parse(JsonParser.parseString(
             "{\"providers\":[{\"name\":\"fake\",\"preset\":\"custom-openai\",\"baseUrl\":\"https://example.invalid/v1\",\"model\":\"m\"}]}")
             .getAsJsonObject()));
@@ -384,10 +385,11 @@ public final class AssistantGameTests {
         });
     }
 
-    @GameTest(template = "empty", timeoutTicks = BOOT, batch = "ccai_cancel_timeout")
+    // Waits on a real-time timeout, and CI's test server can run through ticks very fast, so allow far more ticks.
+    @GameTest(template = "empty", timeoutTicks = 2_000_000, batch = "ccai_cancel_timeout")
     public static void cancelAndTimeout(GameTestHelper helper) {
         configure(Config.Backend.SERVER, false);
-        Config.REQUEST_TIMEOUT_SECONDS.set(5);
+        AssistantRuntime.timeoutOverride = java.time.Duration.ofSeconds(1);
         var cancelled = new AtomicBoolean();
         AssistantRuntime.serverChatOverride = (p, r, m, t, b) -> never(cancelled::set);
         var c = boot(helper, ModRegistry.Blocks.COMPUTER_NORMAL.get(), startup("""
@@ -406,7 +408,7 @@ public final class AssistantGameTests {
             """));
         expectOk(helper, c, () -> {
             AssistantRuntime.serverChatOverride = null;
-            Config.REQUEST_TIMEOUT_SECONDS.set(180);
+            AssistantRuntime.timeoutOverride = null;
             helper.assertTrue(cancelled.get(), "backend call was cancelled");
         });
     }

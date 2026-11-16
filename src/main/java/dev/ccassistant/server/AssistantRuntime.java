@@ -56,6 +56,8 @@ public final class AssistantRuntime {
 
     public static volatile @Nullable PlayerTransport transportOverride;
     public static volatile @Nullable ServerChat serverChatOverride;
+    /** Shorter request timeout for game tests, which can't wait minutes of real time. */
+    public static volatile @Nullable Duration timeoutOverride;
 
     private enum Route {PLAYER, SERVER}
 
@@ -300,15 +302,16 @@ public final class AssistantRuntime {
         var cap = Config.MAX_TOKENS.get();
         if (d.provider != null) cap = Math.min(cap, d.provider.maxTokens());
         var maxTokens = request.has("max_tokens") ? (int) Math.min(cap, request.get("max_tokens").getAsLong()) : cap;
-        var timeout = Duration.ofSeconds(Config.REQUEST_TIMEOUT_SECONDS.get());
+        var timeout = timeoutOverride != null ? timeoutOverride : Duration.ofSeconds(Config.REQUEST_TIMEOUT_SECONDS.get());
 
         var ownerId = d.owner == null ? null : d.owner.uuid();
         quotas.acquire(api.computerId(), ownerId, Config.quotaLimits());
         var id = nextId.incrementAndGet();
         var f = new InFlight(id, api, d.route, d.owner, d.route == Route.SERVER ? d.provider.name() : profile == null ? "" : profile);
         inFlight.put(id, f);
+        // A little later than the HTTP timeout, so the provider's own timeout error wins when it can.
         f.timeout = timer.schedule(() -> fail(f, AiException.TIMEOUT, "No answer within " + timeout.toSeconds() + "s", false),
-            timeout.toSeconds() + 2, TimeUnit.SECONDS);
+            timeout.toMillis() + Math.min(2000, timeout.toMillis() / 4), TimeUnit.MILLISECONDS);
         try {
             if (d.route == Route.SERVER) {
                 var body = request.deepCopy();
