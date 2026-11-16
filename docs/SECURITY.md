@@ -136,7 +136,14 @@ A malicious or misconfigured server could try to spend a player's key. The clien
 - **Every request ends in exactly one event**, `ai_response` or `ai_error`, unless the computer shut down.
   Timeouts, cancellation, unlinking, the owner disconnecting, and the server stopping all produce `ai_error` with a
   stable code.
-- **Owner disconnects** (player backend): every request routed to that player fails at once with `owner_offline`.
+- **Owner unavailable** (player backend; LUA_API.md "When the owner is offline"):
+  - New requests are refused at once with `owner_offline`, `owner_no_client` or `owner_disabled`.
+  - Requests in progress fail at once when the owner logs out or turns the feature off.
+  - Linked computers get `ai_owner` events, so programs can wait without polling.
+  - Nothing is queued, and nothing falls back to another player's provider. Only the `either` backend falls back, to the
+    operator's provider, and says so in `info.backend`.
+- **Readiness status from the client** is a single "ready / not ready" bit. The server can't learn which providers or
+  models a player has from it.
 - **Server stops:** all requests are cancelled and nothing is retried.
 - **No automatic retries in Java**, so one Lua call never turns into hidden repeated charges. Lua decides whether to try
   again.

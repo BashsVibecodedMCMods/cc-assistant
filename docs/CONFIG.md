@@ -7,7 +7,11 @@
 | `none` (default) | nothing | nothing. Every request fails with `not_configured`. |
 | `player` (**recommended**) | nothing beyond setting the backend | The mod installed **on their client**, and at least one provider profile set up in the in-game UI. They pay their own provider. |
 | `server` | One or more providers in `ccassistant-providers.json`, with keys in environment variables on the server machine. The operator pays. | Nothing extra; the client mod is optional. |
-| `either` | as `server` | optional. Uses the owner's client when it is online and turned on, otherwise the server's default provider. |
+| `either` | as `server` | optional. Uses the owner's client when they are `ready`, otherwise the server's default provider. |
+
+On the `player` backend, a computer whose owner is offline (or has no client mod, or has the feature off) gets a clear
+error at once, such as `owner_offline`, and the `ai` program offers to wait for them. Nothing is queued or charged to
+anyone else (LUA_API.md "When the owner is offline").
 
 Any provider with an OpenAI-compatible or Anthropic-compatible API works (PROVIDERS.md): Anthropic, OpenAI, OpenRouter,
 NanoGPT, Z.AI's pay-as-you-go API, local Ollama or LM Studio, and others. **Subscription plans whose terms limit them to

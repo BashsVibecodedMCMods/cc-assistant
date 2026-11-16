@@ -104,7 +104,8 @@ client mod --HTTPS, player's key for the chosen profile--> any provider (Anthrop
   game connection* serves that computer. Codes are single-use and can't be guessed in practice (32^6 space, rate-limited
   attempts, short expiry). The player must type the code, so nobody can attach their computer to someone else's account.
 - **Disconnects:** when the player logs out, their pending requests fail with `owner_offline`, and new requests fail
-  until they reconnect. Nothing is queued.
+  until they reconnect. Nothing is queued. Computers get an `ai_owner` event when the owner's state changes, so
+  programs can wait for them (LUA_API.md "When the owner is offline").
 - **What the server sees:** the request and response content (it has to: the computer and tools run there) and token
   usage. It **never** sees the API key. A modified client can only feed fabricated responses to its owner's own
   computers; the server treats all responses as untrusted input either way.

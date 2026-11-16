@@ -33,6 +33,7 @@ Example: `false, "not_linked", "Run 'ai link' and type the code in chat."`
   linked = true,
   owner = "Steve",         -- nil when not linked
   ownerOnline = true,      -- player and either backends only
+  ownerState = "ready",    -- player and either backends: see "When the owner is offline" below
   inFlight = 0,            -- this computer's requests in progress
   computerId = 12,
 }
@@ -78,6 +79,49 @@ Cancels a request in progress. The HTTP call is aborted on whichever machine is 
 ### Lifecycle
 - When a computer shuts down or reboots, all of its requests are cancelled and no further events arrive.
 - The link belongs to the computer id, so it survives the computer being moved or broken, like its files do.
+
+### When the owner is offline
+
+On the `player` backend, a computer can only use AI while its owner is **online, with the mod on their client, and the
+feature turned on**. The server never queues requests for later, and never falls back to anyone else's provider: that
+would spend money without the owner present. A computer whose owner is away fails fast and clearly, and nothing is lost.
+
+**Owner states** (`ai.status().ownerState`):
+
+| State | Meaning | Error code a request gets |
+|---|---|---|
+| `ready` | Online, client mod present, feature on, and a usable default profile | (accepted) |
+| `offline` | Not logged in to this server | `owner_offline` |
+| `no_client` | Online, but their client doesn't have the mod | `owner_no_client` |
+| `disabled` | Online with the mod, but the feature is off or no usable profile is set | `owner_disabled` |
+| `unlinked` | The computer has no owner | `not_linked` |
+
+The server knows the state without asking the client each time:
+- Logging in and out are server events.
+- The client sends a one-bit "ready / not ready" status when it joins, and whenever the player changes the switch or
+  their profiles. This tells the server nothing about the providers, models or keys.
+
+**What Lua sees in each situation:**
+1. **Owner not ready before the request:** `ai.request` returns `nil, code, message` at once, with no event. Example:
+   `nil, "owner_offline", "Steve is offline. This computer uses Steve's AI provider, so it can't answer until they're back."`
+   `ai.isAvailable()` returns the same code and message, for checking ahead of time.
+2. **Owner logs out, or turns the feature off, while a request is in progress:** that request ends at once with
+   `ai_error, id, "owner_offline"` (or `"owner_disabled"`). It doesn't wait for the timeout. On the client the HTTP call
+   is aborted.
+3. **Waiting for the owner:** when a linked owner's state changes, every computer linked to them gets
+   `ai_owner, state, ownerName`. A program can sleep on that event instead of polling:
+   ```lua
+   while select(2, ai.isAvailable()) == "owner_offline" do
+     print("Waiting for " .. ai.status().owner .. " to come online (Ctrl+T to stop)...")
+     os.pullEvent("ai_owner")
+   end
+   ```
+   The event is only sent when the state actually changes, so frequent rejoining can't flood computers.
+4. **`either` backend:** when the owner isn't `ready`, requests go to the server's default provider, and
+   `info.backend == "server"` says so. Operators who don't want that set `backend = "player"`.
+
+The error message names the owner, as `ai.status()` already does. It never says why they are unavailable beyond the
+state above, and never mentions their providers.
 
 ### Request body
 
@@ -127,7 +171,7 @@ How tables become JSON:
 |---|---|
 | `not_configured` | Backend is `none`, or the server provider's key variable is empty. |
 | `not_linked` | The computer has no owner, and the backend needs one. |
-| `owner_offline` | Player backend: the owner isn't online, or logged out while a request was in progress. |
+| `owner_offline` | Player backend: the owner isn't online, or logged out while a request was in progress. See "When the owner is offline". |
 | `owner_no_client` | Player backend: the owner's game client doesn't have the mod. |
 | `owner_disabled` | Player backend: the owner's client has the feature off, has no usable profile, or refused because of the owner's own limits. The message says which. |
 | `bad_profile` | `profile` names a profile that doesn't exist or may not be chosen. |
@@ -169,10 +213,13 @@ cancelled and the terminate is passed on.
 3. It stops at `end_turn`, `max_tokens`, `refusal`, `stop_sequence` or `other`, or after `maxTurns` requests, which gives
    the error `too_many_turns`.
 
-If a request fails partway through, the history is put back to the state from before `say`, so the conversation can be
-retried.
+If a request fails partway through, for example because the owner went offline in the middle of a tool loop, the history
+is left at the **last consistent point**: either before `say`, or right after the latest complete round of tool results.
+Tool rounds that already ran are kept, because their side effects (files written, and so on) really happened.
+`conversation:retry()` resends from that point once the problem is fixed, and `conversation:pending()` says whether a
+retry is needed.
 
-Other members: `conversation.messages`, `conversation:save(path)`, `ai.Conversation.load(path, options)`,
+Other members: `conversation:retry()`, `conversation:pending()`, `conversation.messages`, `conversation:save(path)`, `ai.Conversation.load(path, options)`,
 `conversation:reset()`.
 
 ### Example
@@ -220,7 +267,18 @@ end
 - `ai --no-tools`: chat without tools, for models that can't use tools.
 - `ai --profile <name>`: use one of the owner's profiles.
 - `ai link`: show a link code.
-- `ai status`: show the link, the backend and the limits.
+- `ai status`: show the link, the backend, the owner's state and the limits.
+- `ai --resume`: continue the last saved chat.
+
+**When the owner isn't available**, the program never crashes or prints a stack trace:
+- **One-shot mode** (`ai <prompt>`) prints the message in the error colour and exits with failure, so scripts calling
+  `shell.run("ai ...")` can check the result.
+- **Chat mode** prints the message and offers `[W]ait for <owner> / [Q]uit`.
+  - *Wait* listens for `ai_owner` and retries the unanswered message as soon as the owner is `ready`.
+  - The conversation so far is kept either way.
+  - *Quit* first saves it to `/.ai/last_chat.json` and prints `Saved. Run 'ai --resume' to continue later.`
+- `ai --resume` reloads that file.
+- On startup, chat mode checks `ai.isAvailable()` first and shows the same message before you type anything.
 
 Destructive tool calls show what will happen and ask `[y/N]`. The setting `ai.auto_approve` (default `false`) skips that
 prompt on this computer. Ctrl+T cancels the request in progress.

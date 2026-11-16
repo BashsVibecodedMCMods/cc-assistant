@@ -52,6 +52,7 @@ Why raw HTTP and not each provider's SDK:
 | `backend/Backend`, `ServerBackend`, `PlayerBackend`, `EitherBackend` | Routing as in CONFIG.md. |
 | `link/Links`, `link/LinkCodes` | Computer -> owner `SavedData`; one-time codes. |
 | `command/AssistantCommand` | `/assistant link|unlink|list|status|models|reload`. |
+| `link/OwnerStates` | Per-player state (`ready`/`offline`/`no_client`/`disabled`) from login, logout and the client's readiness bit. Fails in-progress requests on change and sends `ai_owner` events to linked computers, only when the state changes. |
 | `net/TransferPayload`, `net/Reassembler` | Chunked bidirectional payload (serverbound custom payloads are capped at 32 KiB); registered `optional()`. |
 
 ## Phase 3: client
@@ -94,7 +95,14 @@ transport installed for tests:
 - Full tool loop: discovery order, `user_` namespacing, bad tools reported, read/write/edit/delete, `run_lua`,
   `run_shell` capture.
 - Path traversal and `rom/` writes; protected paths denied without approval.
-- Timeout, cancel, shutdown; `owner_offline`; `bad_profile`; command computer refused.
+- Timeout, cancel, shutdown; `bad_profile`; command computer refused.
+- **Owner availability:**
+  - Owner offline gives `nil, "owner_offline", <message naming the owner>` straight from `ai.request` and `ai.isAvailable`.
+  - A fake player joining without the mod channel gives `owner_no_client`; readiness bit off gives `owner_disabled`.
+  - The owner logging out mid-request gives `ai_error, id, "owner_offline"` well before the timeout.
+  - `ai_owner` is sent on each state change, and only on a change.
+  - `either` falls back to the server provider with `info.backend == "server"`.
+  - `Conversation` keeps completed tool rounds and `retry()` continues after the owner returns.
 - The server backend against a local fake OpenAI-compatible server, end to end through `ai.request`.
 - Tests that change config run in their own `batch`.
 
@@ -114,5 +122,7 @@ README, release notes, CLAUDE.md.
    environment-variable mode as an option. There's no OS keychain in v1.
 4. **Lua choosing a profile:** allowed by name for profiles the owner marked as choosable (on by default). Say if it
    should be off by default.
-5. **No streaming in v1**: replies arrive whole.
-6. **Default limits:** 8192 max tokens, 6 requests a minute and 60 an hour on the client, 10 a minute on the server.
+5. **Owner offline:** fail fast with a clear message and let programs wait for `ai_owner`. No queueing, no fallback to
+   anyone else's provider, except the operator's on `either`.
+6. **No streaming in v1**: replies arrive whole.
+7. **Default limits:** 8192 max tokens, 6 requests a minute and 60 an hour on the client, 10 a minute on the server.
