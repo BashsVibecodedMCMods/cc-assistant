@@ -566,4 +566,53 @@ public final class AssistantGameTests {
             Config.ALLOW_USER_TOOLS.set(true);
         });
     }
+
+    @GameTest(template = "empty", timeoutTicks = BOOT, batch = "ccai_real_http")
+    public static void serverBackendOverRealHttp(GameTestHelper helper) {
+        configure(Config.Backend.SERVER, false);
+        com.sun.net.httpserver.HttpServer server;
+        var seenBody = new AtomicReference<String>();
+        try {
+            server = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        server.createContext("/v1/chat/completions", ex -> {
+            seenBody.set(new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            var out = """
+                {"model":"local-model","choices":[{"finish_reason":"tool_calls","message":{"content":"Let me look.",
+                 "tool_calls":[{"id":"call_9","type":"function","function":{"name":"list_files","arguments":"{\\"path\\":\\"/\\"}"}}]}}],
+                 "usage":{"prompt_tokens":12,"completion_tokens":7}}
+                """.getBytes(StandardCharsets.UTF_8);
+            ex.sendResponseHeaders(200, out.length);
+            ex.getResponseBody().write(out);
+            ex.close();
+        });
+        server.start();
+        rt().useProviders(dev.ccassistant.server.ServerProviders.parse(JsonParser.parseString(
+            "{\"providers\":[{\"name\":\"local\",\"preset\":\"custom-openai\",\"baseUrl\":\"http://127.0.0.1:"
+                + server.getAddress().getPort() + "/v1\",\"model\":\"local-model\",\"maxTokens\":321}]}").getAsJsonObject()));
+        var c = boot(helper, ModRegistry.Blocks.COMPUTER_NORMAL.get(), startup("""
+            local reply, info = require("cc.ai").send {
+              system = "be brief",
+              messages = { { role = "user", content = "list files" } },
+              tools = { { name = "list_files", description = "list", input_schema = { type = "object", properties = { path = { type = "string" } } } } },
+            }
+            check(reply, "request failed: " .. tostring(info))
+            eq(info.backend, "server", "backend") eq(info.profile, "local", "provider name")
+            eq(reply.model, "local-model", "model") eq(reply.stop_reason, "tool_use", "stop reason")
+            eq(reply.content[1].type, "text", "text block") eq(reply.content[1].text, "Let me look.", "text")
+            eq(reply.content[2].type, "tool_use", "tool block") eq(reply.content[2].id, "call_9", "call id")
+            eq(reply.content[2].input.path, "/", "decoded arguments")
+            eq(reply.usage.input_tokens, 12, "usage")
+            """));
+        expectOk(helper, c, () -> {
+            server.stop(0);
+            var body = JsonParser.parseString(seenBody.get()).getAsJsonObject();
+            helper.assertTrue(body.get("model").getAsString().equals("local-model"), "model from the provider config");
+            helper.assertTrue(body.get("max_tokens").getAsInt() == 321, "provider token cap applied: " + body.get("max_tokens"));
+            helper.assertTrue(body.getAsJsonArray("messages").get(0).getAsJsonObject().get("role").getAsString().equals("system"), "system first");
+            helper.assertTrue(body.getAsJsonArray("tools").get(0).getAsJsonObject().get("type").getAsString().equals("function"), "OpenAI tool shape");
+        });
+    }
 }

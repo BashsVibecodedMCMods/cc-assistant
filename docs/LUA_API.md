@@ -47,7 +47,7 @@ Creates a one-time code (6 characters, valid 300 seconds). The player who should
 - Linking a computer that already has an owner moves it to the new player (SECURITY.md §3).
 
 ### `ai.unlink()` -> `boolean`
-Removes the link and fails any requests in progress with `not_linked`. Returns whether a link existed.
+Removes the link and ends any requests in progress with `cancelled`. Returns whether a link existed.
 
 ### `ai.request(body)` -> `id` | `nil, code, message`
 Checks `body` (see [Request body](#request-body)), sends it in the background, and returns a request id (an integer).
@@ -276,7 +276,7 @@ end
 - **Chat mode** prints the message and offers `[W]ait for <owner> / [Q]uit`.
   - *Wait* listens for `ai_owner` and retries the unanswered message as soon as the owner is `ready`.
   - The conversation so far is kept either way.
-  - *Quit* first saves it to `/.ai/last_chat.json` and prints `Saved. Run 'ai --resume' to continue later.`
+  - *Quit* first saves it to `/.ai/last_chat` and prints `Saved. Run 'ai --resume' to continue later.`
 - `ai --resume` reloads that file.
 - On startup, chat mode checks `ai.isAvailable()` first and shows the same message before you type anything.
 
