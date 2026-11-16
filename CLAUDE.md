@@ -14,7 +14,8 @@ computers talk to AI models through any OpenAI-compatible or Anthropic-compatibl
   lowercased method names. `dev/ccassistant/test/**` and `data/ccassistant/structure/**` are excluded from the jar.
 - CI is `.github/workflows/release.yml`, copied from the sibling mods. Pushing `MC<mc>-<mod version>[-suffix]` publishes a
   release with `.github/release-notes.md` as its notes. A suffix makes it a prerelease, and the mod version in the tag
-  must equal `mod_version`.
+  must equal `mod_version`. A manual run of the workflow with a `tag` input does the same without pushing a tag: GitHub
+  creates the tag on the run's commit when it publishes. Use that when tag pushes aren't possible.
 
 ## Architecture
 - **Provider layer** (`provider/`, plain Java, shared by server and client):

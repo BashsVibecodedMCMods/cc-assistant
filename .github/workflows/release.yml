@@ -8,6 +8,11 @@ on:
     tags: ['MC*', 'v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Optional release tag to create on this commit, e.g. MC1.21.1-0.1.0-beta.1 (empty = build only)'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -19,9 +24,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check release tag
         id: tag
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || inputs.tag != ''
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
-          tag="$GITHUB_REF_NAME"
+          # A pushed tag, or a tag given to a manual run (created on this commit when the release is published).
+          tag="${INPUT_TAG:-$GITHUB_REF_NAME}"
           case "$tag" in
             MC*-*) version="${tag#*-}" ;;  # drop "MC<minecraft version>-"
             v*) version="${tag#v}" ;;
@@ -35,6 +43,7 @@ jobs:
             exit 1
           fi
           echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "Release $tag: mod version $version, prerelease=$prerelease"
       - uses: actions/setup-java@v4
         with:
@@ -50,10 +59,12 @@ jobs:
           name: ccassistant
           path: build/libs/*.jar
       - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: steps.tag.outputs.tag != ''
         uses: softprops/action-gh-release@v2
         with:
           files: build/libs/*.jar
           prerelease: ${{ steps.tag.outputs.prerelease == 'true' }}
-          name: ${{ github.ref_name }}
+          tag_name: ${{ steps.tag.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ steps.tag.outputs.tag }}
           body_path: .github/release-notes.md
